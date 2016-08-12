@@ -11,7 +11,7 @@
 
 template <class DataPoint>
 class SSKNN {
-	
+private:
 	//Nested KeepBest class
 	template<class Tsorter>
 	class KeepBest
@@ -35,11 +35,12 @@ class SSKNN {
 				}
 			}//Insertion point not found, so push it back.
 			best.push_back(std::make_pair(score, input));
-			if (best.size() > sortsize) {best.pop_back(); std::cerr << "I was reached!\n";}//Maybe never reached...?
+			if (best.size() > sortsize) best.pop_back();
 			if (best.size() == sortsize) cutoff = std::get<0>(best.back());
 		};
 	};
 
+public:
 	std::vector<DataPoint> observations;
 	unsigned int sortsize = 10;
 
@@ -93,8 +94,8 @@ class SSKNN {
 
 
 	//Populate observations with datapoints from a container
-	template <typename Container>
-	size_t Populate(typename Container::iterator begin, typename Container::iterator end) {
+	template <typename iterator>
+	size_t Populate(iterator begin, iterator end) {
 		while (begin != end) {
 			observations.push_back(*begin);
 			++begin;
@@ -114,47 +115,51 @@ class SSKNN {
 	float Query(DataPoint& dp, unsigned int k, unsigned int emptyDimension) {
 		KeepBest<typename std::vector<DataPoint>::iterator> keeper(k);
 		for (auto i = observations.begin(); i != observations.end();++i) {
-			keeper.insert(distSquared(i, dp, emptyDimension), i);
+			keeper.insert(distSquared(*i, dp, emptyDimension), i);
 		}
 
 		float sum = 0;
-		for (auto i : keeper.best)sum += *(i)[emptyDimension];
+		for (auto i : keeper.best)sum += (*(i.second))[emptyDimension];
 		return sum / static_cast<float>(k);
 	}
 
 	/*
 	template <typename T1, typename Tkeep> 
-	inline void queryPart(DataPoint& dp, Tkeep& keeper, T1 beginIterator, T1 endIterator) {
+	inline std::vector<Tkeep> queryPart(DataPoint& dp, unsigned k, T1 beginIterator, T1 endIterator, unsigned int emptyDimension) {
+		KeepBest<Tkeep> keep()
 		while(beginIterator!=endIterator){
-		keeper.insert(distSquared(i, dp, emptyDimension), beginIterator);
+		keeper.insert(distSquared(*beginIterator, dp, emptyDimension), beginIterator);
 		++beginIterator;
 		}
 	}
 
 
-	float Query_Parallel(DataPoint& dp, unsigned int k, unsigned int emptyDimension, unsigned int nThreads = 0) {
+	void Query_Parallel(DataPoint& dp, unsigned int k, unsigned int emptyDimension, unsigned int nThreads = 0) {
 		if (nThreads == 0)nThreads = std::thread::hardware_concurrency();
 		//We have nThreads keepns
-		std::vector<std::future<KeepBest<typename std::vector<DataPoint>::iterator > > > keepns(nThreads, std::future < KeepBest<typename std::vector<DataPoint>::iterator> >((KeepBest<typename std::vector<DataPoint>::iterator>(k))));
+		std::vector<std::future<KeepBest<typename std::vector<DataPoint>::iterator > > > keepns;
 		//And then one into which to combine results
 		KeepBest<typename std::vector<DataPoint>::iterator> best(k);
 		unsigned int chunksize = observations.size() / nThreads;
-		std::vector<unsigned> chunks(nThreads, 0);
-		chunks[0] = 0;
-		for (unsigned i = 1; i < nThreads-1; ++i) {
-			chunks = chunks[i - 1] + chunksize;
+
+		for (unsigned i = 0; i < nThreads - 1; ++i) {
+			keepns.push_back(std::async(std::launch::async, &queryPart, dp, keepns[i], observations.begin() + (chunksize*i), observations.begin() + (chunksize*(i + 1)), emptyDimension));
 		}
-		chunks[chunks.size()-1]=
-		for (unsigned i = 0; i < nThreads;++i) {
-			keepns[i] = std::async(std::launch::async, queryPart, dp, keepns[i], observations.begin()+observations.size()/static, observations.begin())
+		keepns.push_back(std::async(std::launch::async, &queryPart, dp, keepns[nThreads - 1], observations.begin() + (chunksize*(nThreads - 1)), observations.end(), emptyDimension));
+
+		for (auto k : keepns) {
+			for (auto element : k.get()) {
+				best.insert(element.first, element.second);
+			}
 		}
 
-		
-
+		dp[emptyDimension] = 0;
+		for (auto i : best.best)dp[emptyDimension] += i;
+		dp[emptyDimension] /= static_cast<float>(best.best.size());
 	}
+	
+
 	*/
-
-
 
 };
 
