@@ -13,13 +13,27 @@ int main(int argc, char *argv[]) {
 
 	std::vector<std::vector<float> > data;
 
-	for(unsigned i=0;i<100e6;i++)data.push_back(std::vector<float>() = { uniformdist(randomengine), uniformdist(randomengine), uniformdist(randomengine) });
-	
+	//for(unsigned i=0;i<16;i++)data.push_back(std::vector<float>() = { uniformdist(randomengine), uniformdist(randomengine), uniformdist(randomengine) });
+	data.push_back(std::vector<float>() = { 1,1,1,1 });
+	data.push_back(std::vector<float>() = { 2,2,2,2 });
+	data.push_back(std::vector<float>() = { 3,3,3,3 });
+	data.push_back(std::vector<float>() = { 4,4,4,4 });
+	data.push_back(std::vector<float>() = { 5,5,5,5 });
+	data.push_back(std::vector<float>() = { 6,6,6,6 });
+	data.push_back(std::vector<float>() = { 7,7,7,7 });
+	data.push_back(std::vector<float>() = { 8,8,8,8 });
+
+	std::cerr << "Populated data\n";
 
 	SSKNN<std::vector<float> >  knn;
 	knn.PopulateUsingMove(data);
 	std::vector<float> mypoints = { 0,2,2,2 };
-	mypoints[0]=knn.Query(mypoints, 2, 0);
+	mypoints[0]=knn.Query(mypoints, 4, 0);
+	for (auto i : mypoints)std::cout << i << ",";
+	mypoints = { 0,2,2,2 };
+	std::cout << "\n";
+
+	mypoints[0] = knn.QueryParallel(mypoints, 4, 0, 2);
 	for (auto i : mypoints)std::cout << i << ",";
 
 

@@ -39,34 +39,27 @@ private:
 			if (best.size() == sortsize) cutoff = std::get<0>(best.back());
 		};
 	};
-
-public:
-	std::vector<DataPoint> observations;
-	unsigned int sortsize = 10;
-
-	/*
-	Find distance between two data points (of equal dimensionality).
-	Result invalid if container sizes do not match.
-	Dimensionality not checked for speed.
-	*/
-	template <typename T1, typename T2>
-	float distSquared(T1& coords1, T2& coords2) {
-		float dsquared = 0;
-		for (unsigned i = 0; i < coords1.size(); ++i) {
-			dsquared += ((coords1[i] - coords2[i])*(coords1[i] - coords2[i]));
-		}
-		return dsquared;
-	};
-
-
-	/*
+	
+	//*
+	//Find distance between two data points (of equal dimensionality).
+	//Result invalid if container sizes do not match.
+	//Dimensionality not checked for speed.
+	//*/
+	//	static float distSquared(DataPoint& coords1, DataPoint& coords2) {
+	//	float dsquared = 0;
+	//	for (unsigned i = 0; i < coords1.size(); ++i) {
+	//		dsquared += ((coords1[i] - coords2[i])*(coords1[i] - coords2[i]));
+	//	}
+	//	return dsquared;
+	//};
+/*
 	Find distance between two data points (of equal dimensionality),ignoring
 	one of the dimensions.
 	Result invalid if container sizes do not match.
 	Dimensionality not checked for speed.
 	*/
-	template <typename T1, typename T2>
-	float distSquared(T1& coords1, T2& coords2, unsigned int ignoreDimension) {
+
+	static float distSquared(DataPoint& coords1, DataPoint& coords2, unsigned int ignoreDimension) {
 		float dsquared = 0;
 		for (unsigned i = 0; i < coords1.size(); ++i) {
 			if (i == ignoreDimension)continue;
@@ -75,33 +68,8 @@ public:
 		return dsquared;
 	};
 
-	/*
-	Find distance between two data points (of equal dimensionality), ignoring
-	the dimensions within the ignore list;#
-	Result invalid if container sizes do not match.
-	Dimensionality not checked for speed.
-	*/
-	template <typename T1, typename T2, typename T3>
-	float distSquared(T1& coords1, T2& coords2, T3& ignorelist) {
-		float dsquared = 0;
-		for (unsigned i = 0; i < coords1.size(); ++i) {
-			if (std::find(ignorelist.begin(), ignorelist.end(), i) == ignorelist.end()) continue;
-			dsquared += ((coords1[i] - coords2[i])*(coords1[i] - coords2[i]));
-		}
-		return dsquared;
-	};
-
-
-
-	//Populate observations with datapoints from a container
-	template <typename iterator>
-	size_t Populate(iterator begin, iterator end) {
-		while (begin != end) {
-			observations.push_back(*begin);
-			++begin;
-		}
-		return observations.size();
-	};
+public:
+	std::vector<DataPoint> observations;
 
 	//Populate observations with datapoints from a container, destroying the input vector.
 	template <typename Container>
@@ -121,45 +89,51 @@ public:
 		float sum = 0;
 		for (auto i : keeper.best)sum += (*(i.second))[emptyDimension];
 		return sum / static_cast<float>(k);
-	}
+	};
 
-	/*
-	template <typename T1, typename Tkeep> 
-	inline std::vector<Tkeep> queryPart(DataPoint& dp, unsigned k, T1 beginIterator, T1 endIterator, unsigned int emptyDimension) {
-		KeepBest<Tkeep> keep()
+	KeepBest<typename std::vector<DataPoint>::iterator > QueryPart(DataPoint& dp, unsigned k, typename std::vector<DataPoint>::iterator beginIterator, typename std::vector<DataPoint>::iterator endIterator, unsigned emptyDimension) {
+		KeepBest<typename std::vector<DataPoint>::iterator > keep(k);
 		while(beginIterator!=endIterator){
-		keeper.insert(distSquared(*beginIterator, dp, emptyDimension), beginIterator);
+		keep.insert(distSquared(*beginIterator, dp, emptyDimension), beginIterator);
 		++beginIterator;
 		}
-	}
-
-
-	void Query_Parallel(DataPoint& dp, unsigned int k, unsigned int emptyDimension, unsigned int nThreads = 0) {
+		return keep;
+	};
+	
+	float QueryParallel(DataPoint& dp, unsigned int k, unsigned int emptyDimension, unsigned int nThreads = 0) {
 		if (nThreads == 0)nThreads = std::thread::hardware_concurrency();
 		//We have nThreads keepns
-		std::vector<std::future<KeepBest<typename std::vector<DataPoint>::iterator > > > keepns;
+		std::vector<std::future<KeepBest<typename std::vector<DataPoint>::iterator > > > futures;
+
 		//And then one into which to combine results
 		KeepBest<typename std::vector<DataPoint>::iterator> best(k);
 		unsigned int chunksize = observations.size() / nThreads;
+		std::cerr << "Chunksize = " << chunksize << "\n";
+		
 
 		for (unsigned i = 0; i < nThreads - 1; ++i) {
-			keepns.push_back(std::async(std::launch::async, &queryPart, dp, keepns[i], observations.begin() + (chunksize*i), observations.begin() + (chunksize*(i + 1)), emptyDimension));
+			std::cerr << "Spawning t=" << i << ", from" << (chunksize*i) << " to " << (chunksize*(i + 1)) - 1 << "\n";
+			futures.push_back(std::async(std::launch::async, [&] {return QueryPart(dp, k, observations.begin() + (chunksize*i), observations.begin() + (chunksize*(i + 1)), emptyDimension); }));
 		}
-		keepns.push_back(std::async(std::launch::async, &queryPart, dp, keepns[nThreads - 1], observations.begin() + (chunksize*(nThreads - 1)), observations.end(), emptyDimension));
-
-		for (auto k : keepns) {
-			for (auto element : k.get()) {
+	
+		std::cerr << "Spawning t=" << nThreads-1 << ", from" << (chunksize*(nThreads - 1)) << " to " <<observations.size()-1 << "\n";
+		futures.push_back(std::async(std::launch::async, [&] {return QueryPart(dp, k, observations.begin() + (chunksize*(nThreads - 1)), observations.end(), emptyDimension); }));
+		for (auto&& i: futures) {
+			auto f = i.get();
+			std::cerr << "future" << f.best.size() << "\n";
+			for (auto element : f.best) {
 				best.insert(element.first, element.second);
 			}
 		}
 
-		dp[emptyDimension] = 0;
-		for (auto i : best.best)dp[emptyDimension] += i;
-		dp[emptyDimension] /= static_cast<float>(best.best.size());
-	}
-	
 
-	*/
+
+		dp[emptyDimension] = 0;
+		for (auto i : best.best)dp[emptyDimension] += (*i.second)[emptyDimension];
+		dp[emptyDimension] /= static_cast<float>(best.best.size());
+		return dp[emptyDimension];
+	};
+	
 
 };
 
